@@ -1,0 +1,52 @@
+name: Sync Ramp skills
+
+# Keeps skills/ in sync with the canonical source of truth:
+# https://github.com/ramp-public/ramp-cli (src/ramp_cli/skills)
+# Runs daily and on demand, opening a PR only when upstream actually changed.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-skills
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Pull upstream skills
+        run: |
+          git clone --depth 1 https://github.com/ramp-public/ramp-cli upstream
+          # Mirror only the skill folders (SKILL.md), not the package's .py files.
+          rsync -a --delete --prune-empty-dirs \
+            --include='*/' --include='SKILL.md' --exclude='*' \
+            upstream/src/ramp_cli/skills/ skills/
+          rm -rf upstream
+
+      - name: Open PR if skills changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: chore/sync-skills
+          delete-branch: true
+          commit-message: "chore: sync skills from ramp-public/ramp-cli"
+          title: "chore: sync skills from upstream (ramp-cli)"
+          body: |
+            Automated sync of `skills/` from
+            [ramp-public/ramp-cli](https://github.com/ramp-public/ramp-cli/tree/main/src/ramp_cli/skills).
+
+            This PR mirrors the canonical `src/ramp_cli/skills` directory 1:1 (added,
+            changed, and removed skills; only `SKILL.md` files). Review the diff and merge
+            to publish the updated skills.
+          labels: |
+            automated
+            skills-sync
